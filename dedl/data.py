@@ -73,7 +73,7 @@ def _generate_synthetic(config: Dict) -> Tuple[ArrayLike, ArrayLike, np.ndarray]
     test_size = int(data_cfg.get("test_size", train_size))
     n = train_size + test_size
 
-    t_combo_obs = data_cfg.get("t_combo_obs") or [list(map(int, seq)) for seq in itertools.product([0, 1], repeat=m)]
+    t_combo_obs = data_cfg.get("t_combo_obs") or [list(seq) for seq in itertools.product([0, 1], repeat=m)]
     t_dist_obs = data_cfg.get("t_dist_obs") or [1 / (2 ** m)] * (2 ** m)
 
     noise_level = float(data_cfg.get("noise_level", 0.1))
