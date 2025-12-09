@@ -65,7 +65,7 @@ def train_model(model: StructuredNet, dataloader: DataLoader, config: Dict) -> L
             no_improve = 0
         else:
             no_improve += 1
-        if mse_threshold and mse < mse_threshold and epoch > patience:
+        if mse_threshold > 0 and mse < mse_threshold:
             break
         if no_improve >= patience:
             break
