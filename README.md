@@ -35,7 +35,7 @@ Experiments are controlled by a `YAML` file. Key sections:
   - Real-data options: `path` (CSV), `factor_cols` (0/1 treatment columns), `feature_cols` (covariates), `outcome_col`, `dropna` (or fill mean), `train_size`/`test_size`, `seed`.
 - **model**
   - `layers`: hidden sizes for the structured network producing \(\beta(x)\).
-  - `link_function`: `sigmoid` or `linear` (extendable), `learn_scale`/`learn_shift` to train link parameters, `pdl_layers` for the pure DNN baseline.
+  - `link_function`: `sigmoid`, `linear`, or `softplus` (extendable), `learn_scale`/`learn_shift` to train link parameters, `pdl_layers` for the pure DNN baseline.
 - **training**
   - `batch_size`, `lr`, `weight_decay`, `epochs`, `patience`, `mse_threshold`, `loss_fn` (`mse` or custom torch loss).
 - **debias**
