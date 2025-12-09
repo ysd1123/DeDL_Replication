@@ -102,8 +102,11 @@ def cross_fit(model_factory, x: np.ndarray, t: np.ndarray, y: np.ndarray, config
         train_model(model, loader, config)
         return [model]
 
+    # Use deterministic random state for reproducible cross-validation splits
+    cv_seed = config.get("training", {}).get("cv_seed", config.get("data", {}).get("seed", 42))
+    rng = np.random.RandomState(cv_seed)
     indices = np.arange(len(x))
-    np.random.shuffle(indices)
+    rng.shuffle(indices)
     folds = np.array_split(indices, k)
     models: List[StructuredNet] = []
     for i in range(k):
