@@ -31,7 +31,7 @@ def _lr_baseline(X: np.ndarray, T: np.ndarray, Y: np.ndarray, t_star: np.ndarray
 def _compute_gradient(link: str, c: float, u: float, t: np.ndarray) -> np.ndarray:
     if link == "sigmoid":
         grad_beta = c * np.exp(-u) / (1 + np.exp(-u)) ** 2 * t
-        grad_d = 1 / (1 + np.exp(-u))
+        grad_d = 1.0
     elif link == "linear":
         grad_beta = t
         grad_d = 1.0
