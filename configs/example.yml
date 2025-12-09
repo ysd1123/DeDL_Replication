@@ -1,0 +1,35 @@
+data:
+  type: synthetic
+  m: 2
+  d_c: 5
+  train_size: 500
+  test_size: 200
+  noise_level: 0.1
+  outcome_fn: sigmoid
+  coef_dist: normal
+  coef_scale: 1.0
+  c_true_range: [0.5, 1.5]
+  d_true: 0.0
+  t_combo_obs:
+    - [0,0]
+    - [0,1]
+    - [1,0]
+    - [1,1]
+  t_dist_obs: [0.25, 0.25, 0.25, 0.25]
+model:
+  layers: [64, 64]
+  link_function: sigmoid
+  learn_scale: true
+  learn_shift: true
+  pdl_layers: [64, 64]
+training:
+  batch_size: 128
+  lr: 0.001
+  weight_decay: 0.0
+  epochs: 200
+  patience: 20
+  mse_threshold: 0.01
+  loss_fn: mse
+n_replications: 1
+debias:
+  ridge: 1e-3
