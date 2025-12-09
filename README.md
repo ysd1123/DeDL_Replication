@@ -1,10 +1,10 @@
-# DeDL Replication Toolkit
+# DeDL Framework Toolkit
 
-This repository contains a reusable experiment framework derived from the original synthetic experiment notebook (`synthetic_experiments.ipynb`) for the paper:
-
-Ye, Zikun; Zhang, Zhiqi; Zhang, Dennis; Zhang, Heng; Zhang, Renyu. 2025. *Deep-Learning-Based Causal Inference for Large-Scale Combinatorial Experiments: Theory and Empirical Evidence.* Forthcoming in **Management Science**.
-
-The notebook is preserved for reference, and the reusable Python modules provide a command-line workflow for running new DeDL experiments on synthetic or real data.
+> This repository contains a reusable experiment framework derived from the original synthetic experiment notebook (`synthetic_experiments.ipynb`) for the paper:
+> 
+> Ye, Zikun; Zhang, Zhiqi; Zhang, Dennis; Zhang, Heng; Zhang, Renyu. 2025. *Deep-Learning-Based Causal Inference for Large-Scale Combinatorial Experiments: Theory and Empirical Evidence.* Forthcoming in **Management Science**.
+> 
+> The notebook is preserved for reference, and the reusable Python modules provide a command-line workflow for running new DeDL experiments on synthetic or real data.
 
 ## Installation
 
@@ -27,7 +27,7 @@ The script will load data, train the structured network, evaluate baseline and d
 
 ## Configuration
 
-Experiments are controlled by a YAML file. Key sections:
+Experiments are controlled by a `YAML` file. Key sections:
 
 - **data**
   - `type`: `synthetic` or `real`.
