@@ -127,7 +127,17 @@ def _process_real(config: Dict) -> Tuple[ArrayLike, ArrayLike, np.ndarray]:
     y = df[outcome_col].to_numpy(dtype=float)
 
     train_size = int(data_cfg.get("train_size", int(0.7 * len(df))))
+    # Clamp train_size to at most len(df)
+    train_size = min(train_size, len(df))
     test_size = int(data_cfg.get("test_size", len(df) - train_size))
+    # Clamp test_size so that train_size + test_size <= len(df)
+    test_size = min(test_size, len(df) - train_size)
+    if train_size + test_size < len(df):
+        # Optionally warn if not all data is used
+        import warnings
+        warnings.warn(
+            f"train_size + test_size ({train_size} + {test_size}) < total rows ({len(df)}). Some data will be unused."
+        )
     train_idx = np.arange(train_size)
     test_idx = np.arange(train_size, train_size + test_size)
 
