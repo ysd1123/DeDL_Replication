@@ -119,6 +119,9 @@ def _process_real(config: Dict) -> Tuple[ArrayLike, ArrayLike, np.ndarray]:
     if dropna:
         df = df.dropna(subset=factor_cols + feature_cols + [outcome_col])
     else:
+        # Check for missing values in factor_cols
+        if df[factor_cols].isnull().any().any():
+            raise ValueError("Missing values found in factor_cols. Binary treatments cannot be imputed with mean. Please clean your data or use dropna=True.")
         df = df.fillna(df.mean(numeric_only=True))
 
     t = df[factor_cols].to_numpy(dtype=float)
