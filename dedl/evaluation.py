@@ -31,7 +31,7 @@ def _lr_baseline(X: np.ndarray, T: np.ndarray, Y: np.ndarray, t_star: np.ndarray
 def _compute_gradient(link: str, c: float, u: float, t: np.ndarray) -> np.ndarray:
     if link == "sigmoid":
         grad_beta = c * np.exp(-u) / (1 + np.exp(-u)) ** 2 * t
-        grad_d = 1 / (1 + np.exp(-u))
+        grad_d = 1.0
     elif link == "linear":
         grad_beta = t
         grad_d = 1.0
@@ -103,6 +103,7 @@ def evaluate_methods(
         x_tensor = torch.tensor(X, dtype=torch.float32)
         t_base_batch = torch.tensor(np.repeat(baseline_t0[None, :], len(X), axis=0), dtype=torch.float32)
         sdl_base = trained_model(x_tensor, t_base_batch)[0].mean().item()
+    dedl_base = _dedl_predict(trained_model, X, T, Y, baseline_t0, config)
 
     for t_star in t_stars:
         la_pred = _la_baseline(T, Y, t_star)
@@ -127,6 +128,6 @@ def evaluate_methods(
             "lr_diff": lr_pred - lr_base,
             "pdl_diff": pdl_pred - pdl_base,
             "sdl_diff": sdl_pred - sdl_base,
-            "dedl_diff": dedl_pred - la_base,
+            "dedl_diff": dedl_pred - dedl_base,
         })
     return results
