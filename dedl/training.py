@@ -25,7 +25,9 @@ def train_model(model: StructuredNet, dataloader: DataLoader, config: Dict) -> L
     lr = float(train_cfg.get("lr", 1e-3))
     weight_decay = float(train_cfg.get("weight_decay", 0.0))
     epochs = int(train_cfg.get("epochs", 1000))
-    mse_threshold = float(train_cfg.get("mse_threshold", 0.0))
+    mse_threshold = train_cfg.get("mse_threshold", None)
+    if mse_threshold is not None:
+        mse_threshold = float(mse_threshold)
     patience = int(train_cfg.get("patience", 10))
     l1_weight = float(train_cfg.get("l1_weight", 0.0))
 
@@ -65,7 +67,7 @@ def train_model(model: StructuredNet, dataloader: DataLoader, config: Dict) -> L
             no_improve = 0
         else:
             no_improve += 1
-        if mse_threshold > 0 and mse < mse_threshold:
+        if mse_threshold is not None and mse < mse_threshold:
             break
         if no_improve >= patience:
             break
