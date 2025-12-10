@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from .models import StructuredNet, PlainNet
 
 
-def _build_dataloader(x: np.ndarray, t: np.ndarray, y: np.ndarray, batch_size: int, shuffle: bool = True) -> DataLoader:
+def build_dataloader(x: np.ndarray, t: np.ndarray, y: np.ndarray, batch_size: int, shuffle: bool = True) -> DataLoader:
     dataset = TensorDataset(torch.tensor(x, dtype=torch.float32), torch.tensor(t, dtype=torch.float32), torch.tensor(y, dtype=torch.float32))
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
@@ -25,7 +25,9 @@ def train_model(model: StructuredNet, dataloader: DataLoader, config: Dict) -> L
     lr = float(train_cfg.get("lr", 1e-3))
     weight_decay = float(train_cfg.get("weight_decay", 0.0))
     epochs = int(train_cfg.get("epochs", 1000))
-    mse_threshold = float(train_cfg.get("mse_threshold", 0.0))
+    mse_threshold = train_cfg.get("mse_threshold", None)
+    if mse_threshold is not None:
+        mse_threshold = float(mse_threshold)
     patience = int(train_cfg.get("patience", 10))
     l1_weight = float(train_cfg.get("l1_weight", 0.0))
 
@@ -65,7 +67,7 @@ def train_model(model: StructuredNet, dataloader: DataLoader, config: Dict) -> L
             no_improve = 0
         else:
             no_improve += 1
-        if mse_threshold > 0 and mse < mse_threshold:
+        if mse_threshold is not None and mse < mse_threshold:
             break
         if no_improve >= patience:
             break
@@ -98,18 +100,21 @@ def cross_fit(model_factory, x: np.ndarray, t: np.ndarray, y: np.ndarray, config
     k = int(config.get("training", {}).get("cv_folds", 1))
     if k <= 1:
         model = model_factory()
-        loader = _build_dataloader(x, t, y, int(config.get("training", {}).get("batch_size", 256)))
+        loader = build_dataloader(x, t, y, int(config.get("training", {}).get("batch_size", 256)))
         train_model(model, loader, config)
         return [model]
 
+    # Use deterministic random state for reproducible cross-validation splits
+    cv_seed = config.get("training", {}).get("cv_seed", config.get("data", {}).get("seed", 42))
+    rng = np.random.RandomState(cv_seed)
     indices = np.arange(len(x))
-    np.random.shuffle(indices)
+    rng.shuffle(indices)
     folds = np.array_split(indices, k)
     models: List[StructuredNet] = []
     for i in range(k):
         val_idx = folds[i]
         train_idx = np.setdiff1d(indices, val_idx)
-        loader = _build_dataloader(x[train_idx], t[train_idx], y[train_idx], int(config.get("training", {}).get("batch_size", 256)))
+        loader = build_dataloader(x[train_idx], t[train_idx], y[train_idx], int(config.get("training", {}).get("batch_size", 256)))
         model = model_factory()
         train_model(model, loader, config)
         models.append(model)
