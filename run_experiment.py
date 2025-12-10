@@ -7,13 +7,13 @@ import numpy as np
 
 from dedl import (
     StructuredNet,
+    build_dataloader,
     evaluate_methods,
     load_data,
     parse_config,
     save_results,
     train_model,
 )
-from dedl.training import _build_dataloader
 
 
 def main():
@@ -28,7 +28,7 @@ def main():
         (x_train, t_train, y_train), (x_test, t_test, y_test), _ = load_data(config)
 
         batch_size = int(config.get("training", {}).get("batch_size", 256))
-        train_loader = _build_dataloader(x_train, t_train, y_train, batch_size)
+        train_loader = build_dataloader(x_train, t_train, y_train, batch_size)
 
         model = StructuredNet(config)
         train_model(model, train_loader, config)
