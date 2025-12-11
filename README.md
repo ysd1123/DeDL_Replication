@@ -1,19 +1,36 @@
 # DeDL Framework Toolkit
 
-> This repository contains a reusable experiment framework derived from the original synthetic experiment notebook (`synthetic_experiments.ipynb`) for the paper:
-> 
-> Ye, Zikun; Zhang, Zhiqi; Zhang, Dennis; Zhang, Heng; Zhang, Renyu. 2025. *Deep-Learning-Based Causal Inference for Large-Scale Combinatorial Experiments: Theory and Empirical Evidence.* Forthcoming in **Management Science**.
-> 
+> This repository contains a reusable experiment framework derived from [the original synthetic experiment notebook](synthetic_experiments.ipynb) for the paper: [Zikun Ye, Zhiqi Zhang, Dennis J. Zhang, Heng Zhang, Renyu Zhang (2025) Deep Learning-Based Causal Inference for Large-Scale Combinatorial Experiments: Theory and Empirical Evidence. Management Science 0(0).](https://doi.org/10.1287/mnsc.2024.04625)
+>
 > The notebook is preserved for reference, and the reusable Python modules provide a command-line workflow for running new DeDL experiments on synthetic or real data.
 
 ## Installation
 
-1. (Optional) Create and activate a virtual environment.
-2. Install dependencies:
+1. Clone this repository:
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+    ```bash
+    clone https://github.com/ysd1123/DeDL_Replication.git
+    cd DeDL_Replication
+    ```
+
+2. (Optional) Create and activate a virtual environment.
+
+    ```bash
+    uv venv .venv
+    source .venv/bin/activate
+    ```
+
+3. Install dependencies:
+
+    ```bash
+    uv pip install -r requirements.txt
+    ```
+
+    or if you don't use a virtual environment:
+
+    ```bash
+    pip install -r requirements.txt
+    ```
 
 ## Quick start
 
