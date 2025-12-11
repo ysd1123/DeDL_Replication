@@ -100,7 +100,16 @@ def _generate_synthetic(config: Dict) -> Tuple[ArrayLike, ArrayLike, np.ndarray]
 
     train_idx = np.arange(train_size)
     test_idx = np.arange(train_size, n)
-    return (x[train_idx], t[train_idx], y[train_idx]), (x[test_idx], t[test_idx], y[test_idx]), y_true
+    sim_info = {
+        "x": x,
+        "t": t,
+        "y_true": y_true,
+        "coef": coef,
+        "c_true": c_true,
+        "d_true": d_true,
+        "noise_level": noise_level,
+    }
+    return (x[train_idx], t[train_idx], y[train_idx]), (x[test_idx], t[test_idx], y[test_idx]), sim_info
 
 
 def _process_real(config: Dict) -> Tuple[ArrayLike, ArrayLike, np.ndarray]:
@@ -123,6 +132,11 @@ def _process_real(config: Dict) -> Tuple[ArrayLike, ArrayLike, np.ndarray]:
         if df[factor_cols].isnull().any().any():
             raise ValueError("Missing values found in factor_cols. Binary treatments cannot be imputed with mean. Please clean your data or use dropna=True.")
         df = df.fillna(df.mean(numeric_only=True))
+
+    seed = data_cfg.get("seed", 42)
+    rng = np.random.RandomState(seed)
+    perm = rng.permutation(len(df))
+    df = df.iloc[perm].reset_index(drop=True)
 
     t = df[factor_cols].to_numpy(dtype=float)
     t = np.concatenate([np.ones((len(t), 1)), t], axis=1)
@@ -153,5 +167,7 @@ def load_data(config: Dict) -> Tuple[ArrayLike, ArrayLike, np.ndarray]:
     if data_type == "synthetic":
         return _generate_synthetic(config)
     if data_type == "real":
-        return _process_real(config)
+        train, test, y = _process_real(config)
+        sim_info = {"x": np.concatenate([train[0], test[0]]), "t": np.concatenate([train[1], test[1]]), "y_true": np.concatenate([train[2], test[2]])}
+        return train, test, sim_info
     raise ValueError(f"Unsupported data type: {data_type}")

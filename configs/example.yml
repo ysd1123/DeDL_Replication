@@ -4,7 +4,9 @@ data:
   d_c: 5
   train_size: 500
   test_size: 200
+  seed: 42
   noise_level: 0.1
+  noise_type: normal
   outcome_fn: sigmoid
   coef_dist: normal
   coef_scale: 1.0
@@ -30,6 +32,13 @@ training:
   patience: 20
   mse_threshold: 0.01
   loss_fn: mse
+  cv_folds: 1
+  cv_seed: 123
+  seed: 123
 n_replications: 1
 debias:
   ridge: 1e-3
+  lambda_weighting: uniform
+metrics:
+  cdr_eps: 0.0
+  mape_eps: 1e-6
