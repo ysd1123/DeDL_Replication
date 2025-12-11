@@ -18,27 +18,33 @@ from dedl import (
 )
 
 
+def get_base_seed(config):
+    """
+    Get the base seed from the config using precedence order:
+    1. config["global_seed"] (if present)
+    2. config["training"]["seed"] (if present)
+    3. config["data"]["seed"] (if present)
+    """
+    return (
+        config.get("global_seed")
+        or config.get("training", {}).get("seed")
+        or config.get("data", {}).get("seed")
+    )
+
+
 def set_global_seed(config):
     """
     Set the global random seed for reproducibility.
 
     The function sets the seed for Python's `random` module, NumPy, and PyTorch.
-    The seed value is determined using the following precedence order:
-        1. config["global_seed"] (if present)
-        2. config["training"]["seed"] (if present)
-        3. config["data"]["seed"] (if present)
-    The first available value in this order is used as the seed.
+    The seed value is determined using the precedence order defined in get_base_seed().
     """
     import random
 
     import numpy as np
     import torch
 
-    seed = (
-        config.get("global_seed")
-        or config.get("training", {}).get("seed")
-        or config.get("data", {}).get("seed")
-    )
+    seed = get_base_seed(config)
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
@@ -56,11 +62,7 @@ def main():
     for rep in range(n_rep):
         # Set a replication-specific seed to ensure independent but reproducible replications
         rep_config = copy.deepcopy(config)
-        base_seed = (
-            config.get("global_seed")
-            or config.get("training", {}).get("seed")
-            or config.get("data", {}).get("seed")
-        )
+        base_seed = get_base_seed(config)
         if base_seed is not None:
             rep_seed = base_seed + rep
             # Update seeds in the config for this replication
