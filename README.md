@@ -4,6 +4,10 @@
 >
 > The notebook is preserved for reference, and the reusable Python modules provide a command-line workflow for running new DeDL experiments on synthetic or real data.
 
+## Introduction to DeDL Framework
+
+The core logic of the toolkit follows the design approach proposed in Section 3 of the paper, which combines a **structured deep neural network** (DNN) with **Double Machine Learning** (DML): first, a **structured DNN** approximates the **nuisance functions** in the **data-generating process** (DGP), and then **influence functions** are used to **correct biases** in the predictions, enabling causal inference for unobserved combinations.
+
 ## Installation
 
 1. Clone this repository:
@@ -48,7 +52,18 @@ Experiments are controlled by a `YAML` file. Key sections:
 
 - **data**
   - `type`: `synthetic` or `real`.
-  - Synthetic options: `m` (number of factors), `d_c` (covariate dimension), `train_size`/`test_size`, `t_combo_obs` & `t_dist_obs` (observed treatment combos and sampling probs), `noise_level`, `noise_type`, `outcome_fn` (`sigmoid`, `linear`, `polynomial`), `coef_dist`/`coef_scale`, `c_true_range`, `d_true`, `cov_shift`, `seed`.
+  - Synthetic options: 
+  	- `m` (number of factors), 
+  	- `d_c` (covariate dimension), 
+  	- `train_size`/`test_size` (number of samples in the training/test set), 
+  	- `t_combo_obs` (observed treatment combos), 
+  	- `t_dist_obs` (sampling probs), 
+  	- `noise_level`, `noise_type` (observation noise magnitude and distribution type), 
+  	- `outcome_fn` (`sigmoid`, `linear`, `polynomial`), 
+  	- `coef_dist`/`coef_scale` (to generate the distribution and scale of causal effect coefficients to control for covariates and the magnitude of treatment effects), 
+  	- `c_true_range`, `d_true` (to randomly generate true scaling factors $c_\text{true}$ and shift terms $d_\text{true}$ when `outcome_fn` is `sigmoid`), 
+  	- `cov_shift`, 
+  	- `seed`.
   - Real-data options: `path` (CSV), `factor_cols` (0/1 treatment columns), `feature_cols` (covariates), `outcome_col`, `dropna` (or fill mean), `train_size`/`test_size`, `seed`.
 - **model**
   - `layers`: hidden sizes for the structured network producing \(\beta(x)\).
@@ -79,5 +94,9 @@ See `configs/example.yml` for a full sample configuration.
 
 - `synthetic_experiments.ipynb`: Original notebook implementation for reference.
 - `dedl/`: Modular Python package with data loading, modeling, training, evaluation, and result utilities.
+	- `data.py`: Data generation and preprocessing: `_generate_synthetic` generates experimental data according to the configuration in synthetic data mode, while `_process_real` loads external CSV data
+	- `models.py`: Defines the structured deep model `StructuredNet` and the baseline network `PlainNet`
+	- `training.py`: Data loading, training, and cross-validation
+	- `evaluation.py`: Evaluate baselines vs. DeDL inference
 - `configs/`: Example YAML configurations.
 - `run_experiment.py`: CLI entry point to launch experiments from a config file.
