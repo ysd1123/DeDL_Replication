@@ -57,6 +57,14 @@ def _collect_predictions(models: Union[StructuredNet, Sequence[StructuredNet]], 
     batch_size = config.get("training", {}).get("batch_size", 256)
     dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(T, dtype=torch.float32))
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    
+    # Set models to evaluation mode before processing
+    if isinstance(models, (list, tuple)):
+        for m in models:
+            m.eval()
+    else:
+        models.eval()
+    
     pred_list = []
     beta_list = []
     with torch.no_grad():
@@ -65,14 +73,12 @@ def _collect_predictions(models: Union[StructuredNet, Sequence[StructuredNet]], 
                 preds = []
                 betas = []
                 for m in models:
-                    m.eval()
                     p, b = m(batch_x, batch_t, return_beta=True)
                     preds.append(p.numpy())
                     betas.append(b.numpy())
                 pred_list.append(np.mean(np.stack(preds, axis=0), axis=0))
                 beta_list.append(np.mean(np.stack(betas, axis=0), axis=0))
             else:
-                models.eval()
                 pred, beta = models(batch_x, batch_t, return_beta=True)
                 pred_list.append(pred.numpy())
                 beta_list.append(beta.numpy())
@@ -80,17 +86,22 @@ def _collect_predictions(models: Union[StructuredNet, Sequence[StructuredNet]], 
 
 
 def _predict_sdl(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.ndarray, t_vec: np.ndarray) -> float:
+    # Set models to evaluation mode before processing
+    if isinstance(models, (list, tuple)):
+        for m in models:
+            m.eval()
+    else:
+        models.eval()
+    
     with torch.no_grad():
         x_tensor = torch.tensor(X, dtype=torch.float32)
         t_batch = torch.tensor(np.repeat(t_vec[None, :], len(X), axis=0), dtype=torch.float32)
         if isinstance(models, (list, tuple)):
             preds = []
             for m in models:
-                m.eval()
                 pred, _ = m(x_tensor, t_batch)
                 preds.append(pred.detach().cpu().numpy())
             return float(np.mean(np.concatenate(preds, axis=0)))
-        models.eval()
         pred, _ = models(x_tensor, t_batch)
         return float(pred.mean().item())
 
