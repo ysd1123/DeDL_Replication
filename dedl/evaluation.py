@@ -53,10 +53,26 @@ def _get_model_stats(models: Union[StructuredNet, Sequence[StructuredNet]]) -> T
     return link, c_val
 
 
+def _get_cv_seed(config: Dict) -> int:
+    """Get the cross-validation seed from config."""
+    return config.get("training", {}).get("cv_seed", config.get("data", {}).get("seed", 42))
+
+
+def _assign_to_folds(n_samples: int, n_folds: int, cv_seed: int) -> np.ndarray:
+    """Assign data indices to folds using the same logic as cross_fit."""
+    rng = np.random.RandomState(cv_seed)
+    indices = np.arange(n_samples)
+    rng.shuffle(indices)
+    folds = np.array_split(indices, n_folds)
+    # Create an array mapping each index to its fold number
+    fold_assignment = np.zeros(n_samples, dtype=int)
+    for fold_idx, fold_indices in enumerate(folds):
+        fold_assignment[fold_indices] = fold_idx
+    return fold_assignment
+
+
 def _collect_predictions(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.ndarray, T: np.ndarray, config: Dict) -> Tuple[np.ndarray, np.ndarray]:
     batch_size = config.get("training", {}).get("batch_size", 256)
-    dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(T, dtype=torch.float32))
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     
     # Set models to evaluation mode before processing
     if isinstance(models, (list, tuple)):
@@ -65,27 +81,63 @@ def _collect_predictions(models: Union[StructuredNet, Sequence[StructuredNet]], 
     else:
         models.eval()
     
-    pred_list = []
-    beta_list = []
-    with torch.no_grad():
-        for batch_x, batch_t in loader:
-            if isinstance(models, (list, tuple)):
-                preds = []
-                betas = []
-                for m in models:
-                    p, b = m(batch_x, batch_t, return_beta=True)
-                    preds.append(p.numpy())
-                    betas.append(b.numpy())
-                pred_list.append(np.mean(np.stack(preds, axis=0), axis=0))
-                beta_list.append(np.mean(np.stack(betas, axis=0), axis=0))
-            else:
-                pred, beta = models(batch_x, batch_t, return_beta=True)
+    # Handle cross-fitting case
+    if isinstance(models, (list, tuple)) and len(models) > 1:
+        # Get fold assignments for the data
+        n_folds = len(models)
+        cv_seed = _get_cv_seed(config)
+        fold_assignment = _assign_to_folds(len(X), n_folds, cv_seed)
+        
+        # Predict each fold with its corresponding model
+        pred_all = np.zeros(len(X))
+        beta_all = np.zeros((len(X), T.shape[1]))
+        
+        for fold_idx in range(n_folds):
+            # Get indices for this fold
+            fold_mask = fold_assignment == fold_idx
+            if not fold_mask.any():
+                continue
+            
+            fold_X = X[fold_mask]
+            fold_T = T[fold_mask]
+            
+            # Create dataloader for this fold
+            dataset = TensorDataset(torch.tensor(fold_X, dtype=torch.float32), torch.tensor(fold_T, dtype=torch.float32))
+            loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+            
+            pred_list = []
+            beta_list = []
+            with torch.no_grad():
+                for batch_x, batch_t in loader:
+                    pred, beta = models[fold_idx](batch_x, batch_t, return_beta=True)
+                    pred_list.append(pred.numpy())
+                    beta_list.append(beta.numpy())
+            
+            pred_all[fold_mask] = np.concatenate(pred_list, axis=0)
+            beta_all[fold_mask] = np.concatenate(beta_list, axis=0)
+        
+        return pred_all, beta_all
+    else:
+        # Single model case
+        if isinstance(models, (list, tuple)):
+            model = models[0]
+        else:
+            model = models
+        
+        dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(T, dtype=torch.float32))
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+        
+        pred_list = []
+        beta_list = []
+        with torch.no_grad():
+            for batch_x, batch_t in loader:
+                pred, beta = model(batch_x, batch_t, return_beta=True)
                 pred_list.append(pred.numpy())
                 beta_list.append(beta.numpy())
-    return np.concatenate(pred_list, axis=0), np.concatenate(beta_list, axis=0)
+        return np.concatenate(pred_list, axis=0), np.concatenate(beta_list, axis=0)
 
 
-def _predict_sdl(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.ndarray, t_vec: np.ndarray) -> float:
+def _predict_sdl(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.ndarray, t_vec: np.ndarray, config: Dict) -> float:
     # Set models to evaluation mode before processing
     if isinstance(models, (list, tuple)):
         for m in models:
@@ -94,16 +146,41 @@ def _predict_sdl(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.nd
         models.eval()
     
     with torch.no_grad():
-        x_tensor = torch.tensor(X, dtype=torch.float32)
         t_batch = torch.tensor(np.repeat(t_vec[None, :], len(X), axis=0), dtype=torch.float32)
-        if isinstance(models, (list, tuple)):
-            preds = []
-            for m in models:
-                pred, _ = m(x_tensor, t_batch)
-                preds.append(pred.detach().cpu().numpy())
-            return float(np.mean(np.stack(preds, axis=0), axis=0).mean())
-        pred, _ = models(x_tensor, t_batch)
-        return float(pred.mean().item())
+        
+        # Handle cross-fitting case
+        if isinstance(models, (list, tuple)) and len(models) > 1:
+            # Get fold assignments for the data
+            n_folds = len(models)
+            cv_seed = _get_cv_seed(config)
+            fold_assignment = _assign_to_folds(len(X), n_folds, cv_seed)
+            
+            # Predict each fold with its corresponding model
+            pred_all = np.zeros(len(X))
+            
+            for fold_idx in range(n_folds):
+                # Get indices for this fold
+                fold_mask = fold_assignment == fold_idx
+                if not fold_mask.any():
+                    continue
+                
+                x_tensor = torch.tensor(X[fold_mask], dtype=torch.float32)
+                t_fold = t_batch[fold_mask]
+                
+                pred, _ = models[fold_idx](x_tensor, t_fold)
+                pred_all[fold_mask] = pred.detach().cpu().numpy()
+            
+            return float(pred_all.mean())
+        else:
+            # Single model case
+            if isinstance(models, (list, tuple)):
+                model = models[0]
+            else:
+                model = models
+            
+            x_tensor = torch.tensor(X, dtype=torch.float32)
+            pred, _ = model(x_tensor, t_batch)
+            return float(pred.mean().item())
 
 
 def _dedl_predict(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.ndarray, T: np.ndarray, Y: np.ndarray, t_star: np.ndarray, config: Dict) -> float:
@@ -163,7 +240,7 @@ def evaluate_methods(
     la_base = _la_baseline(T, Y, baseline_t0)
     lr_base = _lr_baseline(X, T, Y, baseline_t0)
     pdl_base = float(pdl_model(torch.tensor(np.concatenate([X, np.repeat(baseline_t0[None, :], len(X), axis=0)], axis=1), dtype=torch.float32)).detach().mean().item())
-    sdl_base = _predict_sdl(trained_model, X, baseline_t0)
+    sdl_base = _predict_sdl(trained_model, X, baseline_t0, config)
     dedl_base = _dedl_predict(trained_model, X, T, Y, baseline_t0, config)
 
     for t_star in t_stars:
@@ -171,7 +248,7 @@ def evaluate_methods(
         lr_pred = _lr_baseline(X, T, Y, t_star)
 
         pdl_pred = float(pdl_model(torch.tensor(np.concatenate([X, np.repeat(t_star[None, :], len(X), axis=0)], axis=1), dtype=torch.float32)).detach().mean().item())
-        sdl_pred = _predict_sdl(trained_model, X, t_star)
+        sdl_pred = _predict_sdl(trained_model, X, t_star, config)
 
         dedl_pred = _dedl_predict(trained_model, X, T, Y, t_star, config)
 
