@@ -71,7 +71,7 @@ def main():
         else:
             trained_model, fold_indices = cross_fit(lambda: StructuredNet(config), x_train, t_train, y_train, config)
             model_for_save = trained_model[0]
-            # Without cross-fitting, evaluate on test data
+            # With single fold (no cross-fitting), evaluate on test data
             eval_x, eval_t, eval_y = x_test, t_test, y_test
 
         m = t_train.shape[1] - 1
