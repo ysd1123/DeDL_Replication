@@ -168,6 +168,6 @@ def load_data(config: Dict) -> Tuple[ArrayLike, ArrayLike, np.ndarray]:
         return _generate_synthetic(config)
     if data_type == "real":
         train, test, y = _process_real(config)
-        sim_info = {"x": np.concatenate([train[0], test[0]]), "t": np.concatenate([train[1], test[1]]), "y_true": np.concatenate([train[2], test[2]])}
+        sim_info = {"x": np.concatenate([train[0], test[0]]), "t": np.concatenate([train[1], test[1]]), "y_obs": np.concatenate([train[2], test[2]])}
         return train, test, sim_info
     raise ValueError(f"Unsupported data type: {data_type}")
