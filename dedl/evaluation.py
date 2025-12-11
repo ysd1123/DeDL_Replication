@@ -57,6 +57,14 @@ def _collect_predictions(models: Union[StructuredNet, Sequence[StructuredNet]], 
     batch_size = config.get("training", {}).get("batch_size", 256)
     dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(T, dtype=torch.float32))
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    
+    # Set models to evaluation mode before processing
+    if isinstance(models, (list, tuple)):
+        for m in models:
+            m.eval()
+    else:
+        models.eval()
+    
     pred_list = []
     beta_list = []
     with torch.no_grad():
@@ -78,6 +86,13 @@ def _collect_predictions(models: Union[StructuredNet, Sequence[StructuredNet]], 
 
 
 def _predict_sdl(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.ndarray, t_vec: np.ndarray) -> float:
+    # Set models to evaluation mode before processing
+    if isinstance(models, (list, tuple)):
+        for m in models:
+            m.eval()
+    else:
+        models.eval()
+    
     with torch.no_grad():
         x_tensor = torch.tensor(X, dtype=torch.float32)
         t_batch = torch.tensor(np.repeat(t_vec[None, :], len(X), axis=0), dtype=torch.float32)
