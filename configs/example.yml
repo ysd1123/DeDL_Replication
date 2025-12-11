@@ -1,44 +1,46 @@
 data:
   type: synthetic
-  m: 2
-  d_c: 5
-  train_size: 500
-  test_size: 200
+  m: 4
+  d_c: 10
+  train_size: 2000          # n_train = m * 500 in the paper
+  test_size: 2000           # n_est = m * 500 synthetic inference sample
   seed: 42
-  noise_level: 0.1
-  noise_type: normal
+  noise_level: 0.05
+  noise_type: uniform
   outcome_fn: sigmoid
-  coef_dist: normal
-  coef_scale: 1.0
-  c_true_range: [0.5, 1.5]
+  coef_dist: uniform
+  coef_scale: 0.5
+  c_true_range: [10.0, 20.0]
   d_true: 0.0
-  t_combo_obs:
-    - [0,0]
-    - [0,1]
-    - [1,0]
-    - [1,1]
-  t_dist_obs: [0.25, 0.25, 0.25, 0.25]
+  cov_shift: false
+  t_combo_obs:              # observe only baseline + singleton cells, as in DeDL synthetic design
+    - [0, 0, 0, 0]
+    - [1, 0, 0, 0]
+    - [0, 1, 0, 0]
+    - [0, 0, 1, 0]
+    - [0, 0, 0, 1]
+  t_dist_obs: [0.2, 0.2, 0.2, 0.2, 0.2]
 model:
-  layers: [64, 64]
+  layers: [256, 256, 128]
   link_function: sigmoid
   learn_scale: true
   learn_shift: true
-  pdl_layers: [64, 64]
+  pdl_layers: [512, 256, 128]
 training:
-  batch_size: 128
-  lr: 0.001
-  weight_decay: 0.0
-  epochs: 200
-  patience: 20
-  mse_threshold: 0.01
+  batch_size: 1000
+  lr: 0.05
+  weight_decay: 1e-4
+  epochs: 2000
+  patience: 200
+  mse_threshold: 0.5
   loss_fn: mse
   cv_folds: 1
   cv_seed: 123
   seed: 123
-n_replications: 1
+n_replications: 30
 debias:
   ridge: 1e-3
-  lambda_weighting: uniform
+  lambda_weighting: empirical
 metrics:
-  cdr_eps: 0.0
-  mape_eps: 1e-6
+  cdr_eps: 0.05
+  mape_eps: 1e-4
