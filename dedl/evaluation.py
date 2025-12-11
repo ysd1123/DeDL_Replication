@@ -53,6 +53,11 @@ def _get_model_stats(models: Union[StructuredNet, Sequence[StructuredNet]]) -> T
     return link, c_val
 
 
+def _get_cv_seed(config: Dict) -> int:
+    """Get the cross-validation seed from config."""
+    return config.get("training", {}).get("cv_seed", config.get("data", {}).get("seed", 42))
+
+
 def _assign_to_folds(n_samples: int, n_folds: int, cv_seed: int) -> np.ndarray:
     """Assign data indices to folds using the same logic as cross_fit."""
     rng = np.random.RandomState(cv_seed)
@@ -80,7 +85,7 @@ def _collect_predictions(models: Union[StructuredNet, Sequence[StructuredNet]], 
     if isinstance(models, (list, tuple)) and len(models) > 1:
         # Get fold assignments for the data
         n_folds = len(models)
-        cv_seed = config.get("training", {}).get("cv_seed", config.get("data", {}).get("seed", 42))
+        cv_seed = _get_cv_seed(config)
         fold_assignment = _assign_to_folds(len(X), n_folds, cv_seed)
         
         # Predict each fold with its corresponding model
@@ -147,7 +152,7 @@ def _predict_sdl(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.nd
         if isinstance(models, (list, tuple)) and len(models) > 1:
             # Get fold assignments for the data
             n_folds = len(models)
-            cv_seed = config.get("training", {}).get("cv_seed", config.get("data", {}).get("seed", 42))
+            cv_seed = _get_cv_seed(config)
             fold_assignment = _assign_to_folds(len(X), n_folds, cv_seed)
             
             # Predict each fold with its corresponding model
