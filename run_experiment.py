@@ -53,6 +53,8 @@ def main():
 
     results_all: List[dict] = []
     n_rep = int(config.get("n_replications", 1))
+    model_for_save = None
+    sim_info = None
     for rep in range(n_rep):
         (x_train, t_train, y_train), (x_test, t_test, y_test), sim_info = load_data(config)
 
