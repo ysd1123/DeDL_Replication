@@ -1,5 +1,6 @@
 from __future__ import annotations
 import argparse
+import copy
 import itertools
 from typing import List
 
@@ -49,31 +50,47 @@ def main():
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
     config = parse_config(args.config)
-    set_global_seed(config)
 
     results_all: List[dict] = []
     n_rep = int(config.get("n_replications", 1))
     for rep in range(n_rep):
-        (x_train, t_train, y_train), (x_test, t_test, y_test), sim_info = load_data(config)
+        # Set a replication-specific seed to ensure independent but reproducible replications
+        rep_config = copy.deepcopy(config)
+        base_seed = (
+            config.get("global_seed")
+            or config.get("training", {}).get("seed")
+            or config.get("data", {}).get("seed")
+        )
+        if base_seed is not None:
+            rep_seed = base_seed + rep
+            # Update seeds in the config for this replication
+            if "global_seed" in rep_config:
+                rep_config["global_seed"] = rep_seed
+            if "data" in rep_config and "seed" in rep_config["data"]:
+                rep_config["data"]["seed"] = rep_seed
+            if "training" in rep_config and "seed" in rep_config["training"]:
+                rep_config["training"]["seed"] = rep_seed
+        set_global_seed(rep_config)
+        (x_train, t_train, y_train), (x_test, t_test, y_test), sim_info = load_data(rep_config)
 
-        batch_size = int(config.get("training", {}).get("batch_size", 256))
+        batch_size = int(rep_config.get("training", {}).get("batch_size", 256))
         train_loader = build_dataloader(x_train, t_train, y_train, batch_size)
 
-        cv_folds = int(config.get("training", {}).get("cv_folds", 1))
+        cv_folds = int(rep_config.get("training", {}).get("cv_folds", 1))
         if cv_folds > 1:
             def model_factory():
-                return StructuredNet(config)
+                return StructuredNet(rep_config)
 
-            trained_model = cross_fit(model_factory, x_train, t_train, y_train, config)
+            trained_model = cross_fit(model_factory, x_train, t_train, y_train, rep_config)
             model_for_save = trained_model[0]
         else:
-            trained_model = StructuredNet(config)
-            train_model(trained_model, train_loader, config)
+            trained_model = StructuredNet(rep_config)
+            train_model(trained_model, train_loader, rep_config)
             model_for_save = trained_model
 
         m = t_train.shape[1] - 1
         t_stars = [np.array([1, *combo], dtype=float) for combo in itertools.product([0, 1], repeat=m)]
-        rep_results = evaluate_methods(x_test, t_test, y_test, trained_model, config, t_stars)
+        rep_results = evaluate_methods(x_test, t_test, y_test, trained_model, rep_config, t_stars)
         for item in rep_results:
             item["replication"] = rep
         results_all.extend(rep_results)
