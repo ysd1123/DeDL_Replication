@@ -115,7 +115,7 @@ def _dedl_predict(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.n
             u_prime = beta.dot(t_prime)
             g_prime = _compute_gradient(link, c_param, u_prime, t_prime)
             if lambda_weighting == "empirical":
-                w = prob_map.get(tuple(t_prime.tolist()), 0.0)
+                w = prob_map.get(tuple(t_prime), 0.0)
             else:
                 w = 1.0
             lambda_mat += w * np.outer(g_prime, g_prime)
