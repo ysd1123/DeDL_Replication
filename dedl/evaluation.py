@@ -1,6 +1,6 @@
 from __future__ import annotations
 import itertools
-from typing import Dict, List, Sequence, Tuple, Union
+from typing import Dict, List, Sequence, Tuple, Union, Optional
 
 import numpy as np
 import torch
@@ -53,8 +53,51 @@ def _get_model_stats(models: Union[StructuredNet, Sequence[StructuredNet]]) -> T
     return link, c_val
 
 
-def _collect_predictions(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.ndarray, T: np.ndarray, config: Dict) -> Tuple[np.ndarray, np.ndarray]:
+def _collect_predictions(
+    models: Union[StructuredNet, Sequence[StructuredNet]], 
+    X: np.ndarray, 
+    T: np.ndarray, 
+    config: Dict,
+    fold_indices: Optional[List[np.ndarray]] = None
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Collect predictions from model(s).
+    
+    When fold_indices is provided (cross-fitting case), each model predicts only on its held-out fold.
+    Otherwise, all models predict on all data and predictions are averaged.
+    """
     batch_size = config.get("training", {}).get("batch_size", 256)
+    
+    # Handle cross-fitting case
+    if isinstance(models, (list, tuple)) and fold_indices is not None:
+        # Each model predicts only on its held-out fold
+        pred_all = np.zeros(len(X))
+        beta_all = np.zeros((len(X), T.shape[1]))
+        
+        with torch.no_grad():
+            for model, fold_idx in zip(models, fold_indices):
+                X_fold = X[fold_idx]
+                T_fold = T[fold_idx]
+                
+                dataset = TensorDataset(
+                    torch.tensor(X_fold, dtype=torch.float32),
+                    torch.tensor(T_fold, dtype=torch.float32)
+                )
+                loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+                
+                fold_preds = []
+                fold_betas = []
+                for batch_x, batch_t in loader:
+                    p, b = model(batch_x, batch_t, return_beta=True)
+                    fold_preds.append(p.numpy())
+                    fold_betas.append(b.numpy())
+                
+                pred_all[fold_idx] = np.concatenate(fold_preds, axis=0)
+                beta_all[fold_idx] = np.concatenate(fold_betas, axis=0)
+        
+        return pred_all, beta_all
+    
+    # Original behavior for non-cross-fitting or when fold_indices not provided
     dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(T, dtype=torch.float32))
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     pred_list = []
@@ -77,10 +120,33 @@ def _collect_predictions(models: Union[StructuredNet, Sequence[StructuredNet]], 
     return np.concatenate(pred_list, axis=0), np.concatenate(beta_list, axis=0)
 
 
-def _predict_sdl(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.ndarray, t_vec: np.ndarray) -> float:
+def _predict_sdl(
+    models: Union[StructuredNet, Sequence[StructuredNet]], 
+    X: np.ndarray, 
+    t_vec: np.ndarray,
+    fold_indices: Optional[List[np.ndarray]] = None
+) -> float:
+    """
+    Predict using SDL (Structured Deep Learning) model.
+    
+    When fold_indices is provided (cross-fitting case), each model predicts only on its held-out fold.
+    Otherwise, all models predict on all data and predictions are averaged.
+    """
     with torch.no_grad():
         x_tensor = torch.tensor(X, dtype=torch.float32)
         t_batch = torch.tensor(np.repeat(t_vec[None, :], len(X), axis=0), dtype=torch.float32)
+        
+        # Handle cross-fitting case
+        if isinstance(models, (list, tuple)) and fold_indices is not None:
+            pred_all = np.zeros(len(X))
+            for model, fold_idx in zip(models, fold_indices):
+                x_fold = x_tensor[fold_idx]
+                t_fold = t_batch[fold_idx]
+                pred, _ = model(x_fold, t_fold)
+                pred_all[fold_idx] = pred.detach().cpu().numpy().squeeze()
+            return float(np.mean(pred_all))
+        
+        # Original behavior
         if isinstance(models, (list, tuple)):
             preds = []
             for m in models:
@@ -91,10 +157,18 @@ def _predict_sdl(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.nd
         return float(pred.mean().item())
 
 
-def _dedl_predict(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.ndarray, T: np.ndarray, Y: np.ndarray, t_star: np.ndarray, config: Dict) -> float:
+def _dedl_predict(
+    models: Union[StructuredNet, Sequence[StructuredNet]], 
+    X: np.ndarray, 
+    T: np.ndarray, 
+    Y: np.ndarray, 
+    t_star: np.ndarray, 
+    config: Dict,
+    fold_indices: Optional[List[np.ndarray]] = None
+) -> float:
     ridge = float(config.get("debias", {}).get("ridge", 1e-3))
     lambda_weighting = config.get("debias", {}).get("lambda_weighting", "uniform")
-    pred_all, beta_all = _collect_predictions(models, X, T, config)
+    pred_all, beta_all = _collect_predictions(models, X, T, config, fold_indices)
 
     link, c_param = _get_model_stats(models)
 
@@ -135,8 +209,14 @@ def evaluate_methods(
     trained_model: Union[StructuredNet, Sequence[StructuredNet]],
     config: Dict,
     t_stars: List[np.ndarray],
+    fold_indices: Optional[List[np.ndarray]] = None,
 ) -> List[Dict[str, float]]:
-    """Evaluate baseline and DeDL estimators for each target treatment."""
+    """
+    Evaluate baseline and DeDL estimators for each target treatment.
+    
+    When fold_indices is provided (cross-fitting case), each model predicts only on its held-out fold.
+    This ensures proper cross-fitting methodology where predictions are made only on data not seen during training.
+    """
     results = []
     m = T.shape[1] - 1
     t_candidates = _enumerate_treatments(m)
@@ -148,17 +228,17 @@ def evaluate_methods(
     la_base = _la_baseline(T, Y, baseline_t0)
     lr_base = _lr_baseline(X, T, Y, baseline_t0)
     pdl_base = float(pdl_model(torch.tensor(np.concatenate([X, np.repeat(baseline_t0[None, :], len(X), axis=0)], axis=1), dtype=torch.float32)).detach().mean().item())
-    sdl_base = _predict_sdl(trained_model, X, baseline_t0)
-    dedl_base = _dedl_predict(trained_model, X, T, Y, baseline_t0, config)
+    sdl_base = _predict_sdl(trained_model, X, baseline_t0, fold_indices)
+    dedl_base = _dedl_predict(trained_model, X, T, Y, baseline_t0, config, fold_indices)
 
     for t_star in t_stars:
         la_pred = _la_baseline(T, Y, t_star)
         lr_pred = _lr_baseline(X, T, Y, t_star)
 
         pdl_pred = float(pdl_model(torch.tensor(np.concatenate([X, np.repeat(t_star[None, :], len(X), axis=0)], axis=1), dtype=torch.float32)).detach().mean().item())
-        sdl_pred = _predict_sdl(trained_model, X, t_star)
+        sdl_pred = _predict_sdl(trained_model, X, t_star, fold_indices)
 
-        dedl_pred = _dedl_predict(trained_model, X, T, Y, t_star, config)
+        dedl_pred = _dedl_predict(trained_model, X, T, Y, t_star, config, fold_indices)
 
         treatment_key = "".join(str(int(b)) for b in t_star[1:])
         results.append({

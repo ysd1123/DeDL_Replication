@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, List
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 import torch
@@ -96,13 +96,20 @@ def train_plain_dnn(x: np.ndarray, t: np.ndarray, y: np.ndarray, layers: List[in
     return model
 
 
-def cross_fit(model_factory, x: np.ndarray, t: np.ndarray, y: np.ndarray, config: Dict) -> List[StructuredNet]:
+def cross_fit(model_factory, x: np.ndarray, t: np.ndarray, y: np.ndarray, config: Dict) -> Tuple[List[StructuredNet], Optional[List[np.ndarray]]]:
+    """
+    Train models using cross-fitting.
+    
+    Returns:
+        models: List of trained models
+        folds: List of arrays containing indices for each fold's held-out data, or None if cv_folds <= 1
+    """
     k = int(config.get("training", {}).get("cv_folds", 1))
     if k <= 1:
         model = model_factory()
         loader = build_dataloader(x, t, y, int(config.get("training", {}).get("batch_size", 256)))
         train_model(model, loader, config)
-        return [model]
+        return [model], None
 
     # Use deterministic random state for reproducible cross-validation splits
     cv_seed = config.get("training", {}).get("cv_seed", config.get("data", {}).get("seed", 42))
@@ -111,6 +118,7 @@ def cross_fit(model_factory, x: np.ndarray, t: np.ndarray, y: np.ndarray, config
     rng.shuffle(indices)
     folds = np.array_split(indices, k)
     models: List[StructuredNet] = []
+    fold_indices: List[np.ndarray] = []
     for i in range(k):
         val_idx = folds[i]
         train_idx = np.setdiff1d(indices, val_idx)
@@ -118,5 +126,6 @@ def cross_fit(model_factory, x: np.ndarray, t: np.ndarray, y: np.ndarray, config
         model = model_factory()
         train_model(model, loader, config)
         models.append(model)
-    return models
+        fold_indices.append(val_idx)
+    return models, fold_indices
 

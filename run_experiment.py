@@ -64,16 +64,19 @@ def main():
             def model_factory():
                 return StructuredNet(config)
 
-            trained_model = cross_fit(model_factory, x_train, t_train, y_train, config)
+            trained_model, fold_indices = cross_fit(model_factory, x_train, t_train, y_train, config)
             model_for_save = trained_model[0]
+            # For cross-fitting, evaluate on training data with proper fold assignments
+            eval_x, eval_t, eval_y = x_train, t_train, y_train
         else:
-            trained_model = StructuredNet(config)
-            train_model(trained_model, train_loader, config)
-            model_for_save = trained_model
+            trained_model, fold_indices = cross_fit(lambda: StructuredNet(config), x_train, t_train, y_train, config)
+            model_for_save = trained_model[0]
+            # Without cross-fitting, evaluate on test data
+            eval_x, eval_t, eval_y = x_test, t_test, y_test
 
         m = t_train.shape[1] - 1
         t_stars = [np.array([1, *combo], dtype=float) for combo in itertools.product([0, 1], repeat=m)]
-        rep_results = evaluate_methods(x_test, t_test, y_test, trained_model, config, t_stars)
+        rep_results = evaluate_methods(eval_x, eval_t, eval_y, trained_model, config, t_stars, fold_indices)
         for item in rep_results:
             item["replication"] = rep
         results_all.extend(rep_results)
