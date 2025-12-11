@@ -73,8 +73,13 @@ def _generate_synthetic(config: Dict) -> Tuple[ArrayLike, ArrayLike, np.ndarray]
     test_size = int(data_cfg.get("test_size", train_size))
     n = train_size + test_size
 
-    t_combo_obs = data_cfg.get("t_combo_obs") or [list(seq) for seq in itertools.product([0, 1], repeat=m)]
-    t_dist_obs = data_cfg.get("t_dist_obs") or [1 / (2 ** m)] * (2 ** m)
+    default_combos = [[0] * m]
+    for idx in range(m):
+        combo = [0] * m
+        combo[idx] = 1
+        default_combos.append(combo)
+    t_combo_obs = data_cfg.get("t_combo_obs") or default_combos
+    t_dist_obs = data_cfg.get("t_dist_obs") or [1 / len(t_combo_obs)] * len(t_combo_obs)
 
     noise_level = float(data_cfg.get("noise_level", 0.1))
     noise_type = data_cfg.get("noise_type", "normal")
@@ -82,7 +87,7 @@ def _generate_synthetic(config: Dict) -> Tuple[ArrayLike, ArrayLike, np.ndarray]
 
     coef_scale = float(data_cfg.get("coef_scale", 1.0))
     coef_dist = data_cfg.get("coef_dist", "normal")
-    coef = _generate_coefficients(coef_dist, d_c + m + 1, coef_scale)
+    coef = _generate_coefficients(coef_dist, d_c * (m + 1), coef_scale).reshape(d_c, m + 1)
 
     c_true_range = data_cfg.get("c_true_range", [1.0, 2.0])
     c_true = float(np.random.uniform(c_true_range[0], c_true_range[1]))
@@ -96,7 +101,23 @@ def _generate_synthetic(config: Dict) -> Tuple[ArrayLike, ArrayLike, np.ndarray]
     t = _sample_treatments(t_combo_obs, t_dist_obs, n)
     t = np.concatenate([np.ones((n, 1)), t], axis=1)
 
-    y, y_true = _apply_outcome_function(x, t, coef, c_true, d_true, noise_level, outcome_fn, noise_type)
+    beta_true = np.power(x @ coef, 3)
+    u = np.sum(beta_true * t, axis=1)
+    if outcome_fn == "sigmoid":
+        y_true = c_true / (1 + np.exp(-u)) + d_true
+    elif outcome_fn == "linear":
+        y_true = u + d_true
+    elif outcome_fn == "polynomial":
+        y_true = u + 0.1 * (u ** 2) + d_true
+    else:
+        raise ValueError(f"Unsupported outcome function: {outcome_fn}")
+    if noise_type == "normal":
+        noise = np.random.normal(scale=noise_level, size=len(x))
+    elif noise_type == "laplace":
+        noise = np.random.laplace(scale=noise_level, size=len(x))
+    else:
+        noise = np.random.uniform(-noise_level, noise_level, size=len(x))
+    y = y_true + noise
 
     train_idx = np.arange(train_size)
     test_idx = np.arange(train_size, n)
@@ -105,6 +126,7 @@ def _generate_synthetic(config: Dict) -> Tuple[ArrayLike, ArrayLike, np.ndarray]
         "t": t,
         "y_true": y_true,
         "coef": coef,
+        "beta_true": beta_true,
         "c_true": c_true,
         "d_true": d_true,
         "noise_level": noise_level,

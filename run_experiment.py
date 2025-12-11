@@ -101,7 +101,13 @@ def main():
 
         m = t_train.shape[1] - 1
         t_stars = [np.array([1, *combo], dtype=float) for combo in itertools.product([0, 1], repeat=m)]
-        rep_results = evaluate_methods(x_test, t_test, y_test, trained_model, rep_config, t_stars)
+        rep_results = evaluate_methods(
+            (x_train, t_train, y_train),
+            (x_test, t_test, y_test),
+            trained_model,
+            rep_config,
+            t_stars,
+        )
         for item in rep_results:
             item["replication"] = rep
         results_all.extend(rep_results)

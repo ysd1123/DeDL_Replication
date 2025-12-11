@@ -13,7 +13,7 @@ class StructuredNet(nn.Module):
         super().__init__()
         model_cfg = config.get("model", {})
         self.m = int(config["data"]["m"])
-        input_dim = int(config["data"]["d_c"]) + self.m + 1
+        input_dim = int(config["data"]["d_c"])
         layers: Iterable[int] = model_cfg.get("layers", [64, 64])
 
         modules = []
@@ -40,8 +40,7 @@ class StructuredNet(nn.Module):
             self.register_buffer("d_param", torch.tensor([d_init], dtype=torch.float32))
 
     def forward(self, x: torch.Tensor, t: torch.Tensor, return_beta: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
-        xt = torch.cat([x, t], dim=1)
-        beta = self.network(xt)
+        beta = self.network(x)
         u = (beta * t).sum(dim=1)
         if self.link_function == "sigmoid":
             y_hat = self.c_param / (1 + torch.exp(-u)) + self.d_param

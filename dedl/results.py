@@ -74,8 +74,19 @@ def _compute_ground_truth(config: Dict, sim_info: Dict) -> Tuple[pd.DataFrame, D
     d_true = float(sim_info.get("d_true", 0.0))
     noise_level = float(sim_info.get("noise_level", 0.0))
 
-    coef_x = coef[:d_c]
-    coef_t = coef[d_c:]
+    coef_matrix = None
+    coef_x = None
+    coef_t = None
+    beta_design = None
+    if coef.ndim == 2:
+        coef_matrix = coef
+    elif coef.size >= d_c * (m + 1):
+        coef_matrix = coef.reshape(d_c, m + 1)
+    else:
+        coef_x = coef[:d_c]
+        coef_t = coef[d_c:]
+    if coef_matrix is not None:
+        beta_design = np.power(x @ coef_matrix, 3)
 
     combos = list(itertools.product([0, 1], repeat=m))
 
@@ -98,7 +109,10 @@ def _compute_ground_truth(config: Dict, sim_info: Dict) -> Tuple[pd.DataFrame, D
         )
 
     def _deterministic_outcome(t_vec: np.ndarray) -> np.ndarray:
-        u = x @ coef_x + t_vec @ coef_t
+        if beta_design is not None:
+            u = np.sum(beta_design * t_vec, axis=1)
+        else:
+            u = x @ coef_x + t_vec @ coef_t
         if outcome_fn == "sigmoid":
             return c_true / (1 + np.exp(-u)) + d_true
         if outcome_fn == "linear":
