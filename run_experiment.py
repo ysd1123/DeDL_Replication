@@ -8,6 +8,7 @@ import numpy as np
 from dedl import (
     StructuredNet,
     build_dataloader,
+    cross_fit,
     evaluate_methods,
     load_data,
     parse_config,
@@ -16,31 +17,58 @@ from dedl import (
 )
 
 
+def set_global_seed(config):
+    import random
+
+    import numpy as np
+    import torch
+
+    seed = (
+        config.get("global_seed")
+        or config.get("training", {}).get("seed")
+        or config.get("data", {}).get("seed")
+    )
+    if seed is not None:
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run DeDL experiment")
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
     config = parse_config(args.config)
+    set_global_seed(config)
 
     results_all: List[dict] = []
     n_rep = int(config.get("n_replications", 1))
     for rep in range(n_rep):
-        (x_train, t_train, y_train), (x_test, t_test, y_test), _ = load_data(config)
+        (x_train, t_train, y_train), (x_test, t_test, y_test), sim_info = load_data(config)
 
         batch_size = int(config.get("training", {}).get("batch_size", 256))
         train_loader = build_dataloader(x_train, t_train, y_train, batch_size)
 
-        model = StructuredNet(config)
-        train_model(model, train_loader, config)
+        cv_folds = int(config.get("training", {}).get("cv_folds", 1))
+        if cv_folds > 1:
+            def model_factory():
+                return StructuredNet(config)
+
+            trained_model = cross_fit(model_factory, x_train, t_train, y_train, config)
+            model_for_save = trained_model[0]
+        else:
+            trained_model = StructuredNet(config)
+            train_model(trained_model, train_loader, config)
+            model_for_save = trained_model
 
         m = t_train.shape[1] - 1
         t_stars = [np.array([1, *combo], dtype=float) for combo in itertools.product([0, 1], repeat=m)]
-        rep_results = evaluate_methods(x_test, t_test, y_test, model, config, t_stars)
+        rep_results = evaluate_methods(x_test, t_test, y_test, trained_model, config, t_stars)
         for item in rep_results:
             item["replication"] = rep
         results_all.extend(rep_results)
 
-    out_dir = save_results(results_all, config, model)
+    out_dir = save_results(results_all, config, model_for_save, sim_info)
     print(f"Saved results to {out_dir}")
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 import itertools
-from typing import Dict, List
+from typing import Dict, List, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -43,38 +43,87 @@ def _compute_gradient(link: str, c: float, u: float, t: np.ndarray) -> np.ndarra
     return np.concatenate([grad_beta, [grad_d]])
 
 
-def _dedl_predict(model: StructuredNet, X: np.ndarray, T: np.ndarray, Y: np.ndarray, t_star: np.ndarray, config: Dict) -> float:
-    ridge = float(config.get("debias", {}).get("ridge", 1e-3))
-    model.eval()
+def _get_model_stats(models: Union[StructuredNet, Sequence[StructuredNet]]) -> Tuple[str, float]:
+    if isinstance(models, (list, tuple)):
+        link = models[0].link_function
+        c_val = float(np.mean([float(m.c_param.item()) for m in models]))
+    else:
+        link = models.link_function
+        c_val = float(models.c_param.item())
+    return link, c_val
+
+
+def _collect_predictions(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.ndarray, T: np.ndarray, config: Dict) -> Tuple[np.ndarray, np.ndarray]:
+    batch_size = config.get("training", {}).get("batch_size", 256)
+    dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(T, dtype=torch.float32))
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    pred_list = []
+    beta_list = []
     with torch.no_grad():
-        beta_list = []
-        pred_list = []
-        dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(T, dtype=torch.float32))
-        loader = DataLoader(dataset, batch_size=config.get("training", {}).get("batch_size", 256), shuffle=False)
         for batch_x, batch_t in loader:
-            pred, beta = model(batch_x, batch_t, return_beta=True)
-            beta_list.append(beta.numpy())
-            pred_list.append(pred.numpy())
-    beta_all = np.concatenate(beta_list, axis=0)
-    pred_all = np.concatenate(pred_list, axis=0)
+            if isinstance(models, (list, tuple)):
+                preds = []
+                betas = []
+                for m in models:
+                    p, b = m(batch_x, batch_t, return_beta=True)
+                    preds.append(p.numpy())
+                    betas.append(b.numpy())
+                pred_list.append(np.mean(np.stack(preds, axis=0), axis=0))
+                beta_list.append(np.mean(np.stack(betas, axis=0), axis=0))
+            else:
+                pred, beta = models(batch_x, batch_t, return_beta=True)
+                pred_list.append(pred.numpy())
+                beta_list.append(beta.numpy())
+    return np.concatenate(pred_list, axis=0), np.concatenate(beta_list, axis=0)
+
+
+def _predict_sdl(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.ndarray, t_vec: np.ndarray) -> float:
+    with torch.no_grad():
+        x_tensor = torch.tensor(X, dtype=torch.float32)
+        t_batch = torch.tensor(np.repeat(t_vec[None, :], len(X), axis=0), dtype=torch.float32)
+        if isinstance(models, (list, tuple)):
+            preds = []
+            for m in models:
+                pred, _ = m(x_tensor, t_batch)
+                preds.append(pred.detach().cpu().numpy())
+            return float(np.mean(np.concatenate(preds, axis=0)))
+        pred, _ = models(x_tensor, t_batch)
+        return float(pred.mean().item())
+
+
+def _dedl_predict(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.ndarray, T: np.ndarray, Y: np.ndarray, t_star: np.ndarray, config: Dict) -> float:
+    ridge = float(config.get("debias", {}).get("ridge", 1e-3))
+    lambda_weighting = config.get("debias", {}).get("lambda_weighting", "uniform")
+    pred_all, beta_all = _collect_predictions(models, X, T, config)
+
+    link, c_param = _get_model_stats(models)
 
     m = T.shape[1] - 1
     t_candidates = _enumerate_treatments(m)
+
+    unique_T, counts_T = np.unique(T, axis=0, return_counts=True)
+    total = len(T)
+    prob_map = {tuple(row): count / total for row, count in zip(unique_T, counts_T)}
+
     corrected_pred = []
     for i in range(len(X)):
         beta = beta_all[i]
         u_obs = beta.dot(T[i])
-        g_obs = _compute_gradient(model.link_function, float(model.c_param.item()), u_obs, T[i])
+        g_obs = _compute_gradient(link, c_param, u_obs, T[i])
         lambda_mat = np.zeros((len(g_obs), len(g_obs)))
         for t_prime in t_candidates:
             u_prime = beta.dot(t_prime)
-            g_prime = _compute_gradient(model.link_function, float(model.c_param.item()), u_prime, t_prime)
-            lambda_mat += np.outer(g_prime, g_prime)
+            g_prime = _compute_gradient(link, c_param, u_prime, t_prime)
+            if lambda_weighting == "empirical":
+                w = prob_map.get(tuple(t_prime.tolist()), 0.0)
+            else:
+                w = 1.0
+            lambda_mat += w * np.outer(g_prime, g_prime)
         lambda_mat += ridge * np.eye(lambda_mat.shape[0])
         lambda_inv = np.linalg.inv(lambda_mat)
         residual = Y[i] - pred_all[i]
         u_star = beta.dot(t_star)
-        g_star = _compute_gradient(model.link_function, float(model.c_param.item()), u_star, t_star)
+        g_star = _compute_gradient(link, c_param, u_star, t_star)
         corrected_pred.append(float(pred_all[i] + g_star @ lambda_inv @ g_obs * residual))
     return float(np.mean(corrected_pred))
 
@@ -83,7 +132,7 @@ def evaluate_methods(
     X: np.ndarray,
     T: np.ndarray,
     Y: np.ndarray,
-    trained_model: StructuredNet,
+    trained_model: Union[StructuredNet, Sequence[StructuredNet]],
     config: Dict,
     t_stars: List[np.ndarray],
 ) -> List[Dict[str, float]]:
@@ -99,10 +148,7 @@ def evaluate_methods(
     la_base = _la_baseline(T, Y, baseline_t0)
     lr_base = _lr_baseline(X, T, Y, baseline_t0)
     pdl_base = float(pdl_model(torch.tensor(np.concatenate([X, np.repeat(baseline_t0[None, :], len(X), axis=0)], axis=1), dtype=torch.float32)).detach().mean().item())
-    with torch.no_grad():
-        x_tensor = torch.tensor(X, dtype=torch.float32)
-        t_base_batch = torch.tensor(np.repeat(baseline_t0[None, :], len(X), axis=0), dtype=torch.float32)
-        sdl_base = trained_model(x_tensor, t_base_batch)[0].mean().item()
+    sdl_base = _predict_sdl(trained_model, X, baseline_t0)
     dedl_base = _dedl_predict(trained_model, X, T, Y, baseline_t0, config)
 
     for t_star in t_stars:
@@ -110,15 +156,14 @@ def evaluate_methods(
         lr_pred = _lr_baseline(X, T, Y, t_star)
 
         pdl_pred = float(pdl_model(torch.tensor(np.concatenate([X, np.repeat(t_star[None, :], len(X), axis=0)], axis=1), dtype=torch.float32)).detach().mean().item())
-        with torch.no_grad():
-            x_tensor = torch.tensor(X, dtype=torch.float32)
-            t_star_batch = torch.tensor(np.repeat(t_star[None, :], len(X), axis=0), dtype=torch.float32)
-            sdl_pred = trained_model(x_tensor, t_star_batch)[0].mean().item()
+        sdl_pred = _predict_sdl(trained_model, X, t_star)
 
         dedl_pred = _dedl_predict(trained_model, X, T, Y, t_star, config)
 
+        treatment_key = "".join(str(int(b)) for b in t_star[1:])
         results.append({
             "treatment": t_star.tolist(),
+            "treatment_key": treatment_key,
             "la": la_pred,
             "lr": lr_pred,
             "pdl": pdl_pred,
