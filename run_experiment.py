@@ -18,6 +18,16 @@ from dedl import (
 
 
 def set_global_seed(config):
+    """
+    Set the global random seed for reproducibility.
+
+    The function sets the seed for Python's `random` module, NumPy, and PyTorch.
+    The seed value is determined using the following precedence order:
+        1. config["global_seed"] (if present)
+        2. config["training"]["seed"] (if present)
+        3. config["data"]["seed"] (if present)
+    The first available value in this order is used as the seed.
+    """
     import random
 
     import numpy as np
