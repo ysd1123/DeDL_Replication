@@ -104,6 +104,14 @@ def _collect_predictions(
     # Original behavior for non-cross-fitting or when fold_indices not provided
     dataset = TensorDataset(torch.tensor(X, dtype=torch.float32), torch.tensor(T, dtype=torch.float32))
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    
+    # Set models to evaluation mode before processing
+    if isinstance(models, (list, tuple)):
+        for m in models:
+            m.eval()
+    else:
+        models.eval()
+    
     pred_list = []
     beta_list = []
     with torch.no_grad():
