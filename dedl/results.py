@@ -79,6 +79,24 @@ def _compute_ground_truth(config: Dict, sim_info: Dict) -> Tuple[pd.DataFrame, D
 
     combos = list(itertools.product([0, 1], repeat=m))
 
+    treatment_assignments = sim_info.get("treatment_assignments")
+    if treatment_assignments is None:
+        # Fall back to the raw treatment matrix if assignments were not explicitly stored.
+        t_full = np.asarray(sim_info.get("t"))
+        if t_full.ndim == 2:
+            if t_full.shape[1] == m:
+                treatment_assignments = t_full
+            elif t_full.shape[1] >= m + 1:
+                # Drop intercept or any leading columns so only the m binary arms remain.
+                treatment_assignments = t_full[:, -m:]
+    if treatment_assignments is None:
+        raise ValueError("Simulation info is missing treatment assignments required for ground truth computation.")
+    treatment_assignments = np.asarray(treatment_assignments)
+    if treatment_assignments.ndim != 2 or treatment_assignments.shape[1] != m:
+        raise ValueError(
+            f"Treatment assignments must have shape (n_samples, {m}) but received {treatment_assignments.shape}."
+        )
+
     def _deterministic_outcome(t_vec: np.ndarray) -> np.ndarray:
         u = x @ coef_x + t_vec @ coef_t
         if outcome_fn == "sigmoid":
@@ -107,11 +125,8 @@ def _compute_ground_truth(config: Dict, sim_info: Dict) -> Tuple[pd.DataFrame, D
     for combo, t_vec, mu_c in rows:
         ate = mu_c - mu_baseline
         rel_pct = 100 * ate / mu_baseline if mu_baseline != 0 else np.nan
-        # Compute group sizes for baseline and current treatment
-        treatment_assignments = np.asarray(sim_info.get("treatment_assignments"))
-        # treatment_assignments shape: (num_samples, m)
-        # For baseline: all zeros
-        baseline_mask = np.all(treatment_assignments == 0, axis=1)
+        # Compute group sizes for baseline (all-control) and the current treatment combo
+        baseline_mask = np.all(treatment_assignments == baseline_combo, axis=1)
         current_mask = np.all(treatment_assignments == combo, axis=1)
         n1 = np.sum(baseline_mask)
         n2 = np.sum(current_mask)

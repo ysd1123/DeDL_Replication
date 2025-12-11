@@ -77,6 +77,13 @@ def main():
         set_global_seed(rep_config)
         (x_train, t_train, y_train), (x_test, t_test, y_test), sim_info = load_data(rep_config)
 
+        # Drop the intercept column when storing treatment assignments so masks match combos of length m.
+        t_all = np.vstack((t_train, t_test))
+        if t_all.ndim == 2 and t_all.shape[1] > 1:
+            sim_info["treatment_assignments"] = t_all[:, 1:]
+        else:
+            sim_info["treatment_assignments"] = t_all
+
         batch_size = int(rep_config.get("training", {}).get("batch_size", 256))
         train_loader = build_dataloader(x_train, t_train, y_train, batch_size)
 
