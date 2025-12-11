@@ -107,9 +107,16 @@ def _compute_ground_truth(config: Dict, sim_info: Dict) -> Tuple[pd.DataFrame, D
     for combo, t_vec, mu_c in rows:
         ate = mu_c - mu_baseline
         rel_pct = 100 * ate / mu_baseline if mu_baseline != 0 else np.nan
-        n = len(x)
-        var_diff = 2 * (noise_level ** 2) / n if n > 0 else 0.0
-        if var_diff > 0:
+        # Compute group sizes for baseline and current treatment
+        treatment_assignments = np.asarray(sim_info.get("treatment_assignments"))
+        # treatment_assignments shape: (num_samples, m)
+        # For baseline: all zeros
+        baseline_mask = np.all(treatment_assignments == 0, axis=1)
+        current_mask = np.all(treatment_assignments == combo, axis=1)
+        n1 = np.sum(baseline_mask)
+        n2 = np.sum(current_mask)
+        if n1 > 0 and n2 > 0:
+            var_diff = (noise_level ** 2) / n1 + (noise_level ** 2) / n2
             t_stat = ate / math.sqrt(var_diff)
             p_val = 2 * (1 - _normal_cdf(abs(t_stat)))
         else:
