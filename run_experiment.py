@@ -59,6 +59,8 @@ def main():
 
     results_all: List[dict] = []
     n_rep = int(config.get("n_replications", 1))
+    model_for_save = None
+    sim_info = None
     for rep in range(n_rep):
         # Set a replication-specific seed to ensure independent but reproducible replications
         rep_config = copy.deepcopy(config)
