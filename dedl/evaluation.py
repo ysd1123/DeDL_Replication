@@ -65,12 +65,14 @@ def _collect_predictions(models: Union[StructuredNet, Sequence[StructuredNet]], 
                 preds = []
                 betas = []
                 for m in models:
+                    m.eval()
                     p, b = m(batch_x, batch_t, return_beta=True)
                     preds.append(p.numpy())
                     betas.append(b.numpy())
                 pred_list.append(np.mean(np.stack(preds, axis=0), axis=0))
                 beta_list.append(np.mean(np.stack(betas, axis=0), axis=0))
             else:
+                models.eval()
                 pred, beta = models(batch_x, batch_t, return_beta=True)
                 pred_list.append(pred.numpy())
                 beta_list.append(beta.numpy())
@@ -84,9 +86,11 @@ def _predict_sdl(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.nd
         if isinstance(models, (list, tuple)):
             preds = []
             for m in models:
+                m.eval()
                 pred, _ = m(x_tensor, t_batch)
                 preds.append(pred.detach().cpu().numpy())
             return float(np.mean(np.concatenate(preds, axis=0)))
+        models.eval()
         pred, _ = models(x_tensor, t_batch)
         return float(pred.mean().item())
 
