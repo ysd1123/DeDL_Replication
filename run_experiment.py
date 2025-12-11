@@ -1,5 +1,6 @@
 from __future__ import annotations
 import argparse
+import copy
 import itertools
 from typing import List
 
@@ -17,27 +18,33 @@ from dedl import (
 )
 
 
+def get_base_seed(config):
+    """
+    Get the base seed from the config using precedence order:
+    1. config["global_seed"] (if present)
+    2. config["training"]["seed"] (if present)
+    3. config["data"]["seed"] (if present)
+    """
+    return (
+        config.get("global_seed")
+        or config.get("training", {}).get("seed")
+        or config.get("data", {}).get("seed")
+    )
+
+
 def set_global_seed(config):
     """
     Set the global random seed for reproducibility.
 
     The function sets the seed for Python's `random` module, NumPy, and PyTorch.
-    The seed value is determined using the following precedence order:
-        1. config["global_seed"] (if present)
-        2. config["training"]["seed"] (if present)
-        3. config["data"]["seed"] (if present)
-    The first available value in this order is used as the seed.
+    The seed value is determined using the precedence order defined in get_base_seed().
     """
     import random
 
     import numpy as np
     import torch
 
-    seed = (
-        config.get("global_seed")
-        or config.get("training", {}).get("seed")
-        or config.get("data", {}).get("seed")
-    )
+    seed = get_base_seed(config)
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
@@ -54,29 +61,42 @@ def main():
     results_all: List[dict] = []
     n_rep = int(config.get("n_replications", 1))
     for rep in range(n_rep):
-        (x_train, t_train, y_train), (x_test, t_test, y_test), sim_info = load_data(config)
+        # Set a replication-specific seed to ensure independent but reproducible replications
+        rep_config = copy.deepcopy(config)
+        base_seed = get_base_seed(config)
+        if base_seed is not None:
+            rep_seed = base_seed + rep
+            # Update seeds in the config for this replication
+            if "global_seed" in rep_config:
+                rep_config["global_seed"] = rep_seed
+            if "data" in rep_config and "seed" in rep_config["data"]:
+                rep_config["data"]["seed"] = rep_seed
+            if "training" in rep_config and "seed" in rep_config["training"]:
+                rep_config["training"]["seed"] = rep_seed
+        set_global_seed(rep_config)
+        (x_train, t_train, y_train), (x_test, t_test, y_test), sim_info = load_data(rep_config)
 
-        batch_size = int(config.get("training", {}).get("batch_size", 256))
+        batch_size = int(rep_config.get("training", {}).get("batch_size", 256))
         train_loader = build_dataloader(x_train, t_train, y_train, batch_size)
 
-        cv_folds = int(config.get("training", {}).get("cv_folds", 1))
+        cv_folds = int(rep_config.get("training", {}).get("cv_folds", 1))
         if cv_folds > 1:
             def model_factory():
-                return StructuredNet(config)
+                return StructuredNet(rep_config)
 
-            trained_model, fold_indices = cross_fit(model_factory, x_train, t_train, y_train, config)
+            trained_model, fold_indices = cross_fit(model_factory, x_train, t_train, y_train, rep_config)
             model_for_save = trained_model[0]
             # For cross-fitting, evaluate on training data with proper fold assignments
             eval_x, eval_t, eval_y = x_train, t_train, y_train
         else:
-            trained_model, fold_indices = cross_fit(lambda: StructuredNet(config), x_train, t_train, y_train, config)
+            trained_model, fold_indices = cross_fit(lambda: StructuredNet(rep_config), x_train, t_train, y_train, rep_config)
             model_for_save = trained_model[0]
             # With single fold (no cross-fitting), evaluate on test data
             eval_x, eval_t, eval_y = x_test, t_test, y_test
 
         m = t_train.shape[1] - 1
         t_stars = [np.array([1, *combo], dtype=float) for combo in itertools.product([0, 1], repeat=m)]
-        rep_results = evaluate_methods(eval_x, eval_t, eval_y, trained_model, config, t_stars, fold_indices)
+        rep_results = evaluate_methods(eval_x, eval_t, eval_y, trained_model, rep_config, t_stars, fold_indices)
         for item in rep_results:
             item["replication"] = rep
         results_all.extend(rep_results)

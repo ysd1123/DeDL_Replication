@@ -74,6 +74,10 @@ def _collect_predictions(
         pred_all = np.zeros(len(X))
         beta_all = np.zeros((len(X), T.shape[1]))
         
+        # Set models to evaluation mode before processing
+        for m in models:
+            m.eval()
+        
         with torch.no_grad():
             for model, fold_idx in zip(models, fold_indices):
                 X_fold = X[fold_idx]
@@ -132,6 +136,13 @@ def _predict_sdl(
     When fold_indices is provided (cross-fitting case), each model predicts only on its held-out fold.
     Otherwise, all models predict on all data and predictions are averaged.
     """
+    # Set models to evaluation mode before processing
+    if isinstance(models, (list, tuple)):
+        for m in models:
+            m.eval()
+    else:
+        models.eval()
+    
     with torch.no_grad():
         x_tensor = torch.tensor(X, dtype=torch.float32)
         t_batch = torch.tensor(np.repeat(t_vec[None, :], len(X), axis=0), dtype=torch.float32)
@@ -152,7 +163,7 @@ def _predict_sdl(
             for m in models:
                 pred, _ = m(x_tensor, t_batch)
                 preds.append(pred.detach().cpu().numpy())
-            return float(np.mean(np.concatenate(preds, axis=0)))
+            return float(np.mean(np.stack(preds, axis=0), axis=0).mean())
         pred, _ = models(x_tensor, t_batch)
         return float(pred.mean().item())
 
