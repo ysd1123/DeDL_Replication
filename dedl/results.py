@@ -25,6 +25,44 @@ def _normal_cdf(x: float) -> float:
 
 
 def _compute_ground_truth(config: Dict, sim_info: Dict) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    """
+    Compute ground truth metrics for all possible treatment combinations based on the provided configuration and simulation information.
+
+    Parameters
+    ----------
+    config : Dict
+        Configuration dictionary containing data generation parameters such as:
+        - "m": number of treatments (int)
+        - "d_c": number of covariates (int)
+        - "outcome_fn": outcome function type ("sigmoid", "linear", or "polynomial")
+        - "t_combo_obs": list of observed treatment combinations (optional)
+    sim_info : Dict
+        Simulation information dictionary containing:
+        - "x": covariate matrix (array-like, shape [n_samples, d_c])
+        - "coef": coefficients for covariates and treatments (array-like)
+        - "c_true": scaling constant for outcome (float, optional)
+        - "d_true": offset for outcome (float, optional)
+        - "noise_level": standard deviation of noise (float, optional)
+
+    Returns
+    -------
+    gt_df : pd.DataFrame
+        DataFrame with one row per treatment combination, including columns:
+        - "treatment_key": string key for the treatment combination
+        - "treatment": treatment vector
+        - "observable": whether the treatment is observed in the data
+        - "mu": mean outcome for the treatment
+        - "mu_baseline": mean outcome for the baseline (all-control) treatment
+        - "ate": average treatment effect relative to baseline
+        - "relative_effect_pct": relative effect as a percentage
+        - "p_value": p-value for the difference from baseline
+        - "is_best": whether this treatment has the highest ATE
+    best_info : Dict[str, object]
+        Dictionary with information about the best treatment combination:
+        - "treatment_key": string key for the best treatment
+        - "treatment": treatment vector for the best treatment
+        - "ate": ATE for the best treatment
+    """
     m = int(config.get("data", {}).get("m", 0))
     d_c = int(config.get("data", {}).get("d_c", 0))
     outcome_fn = config.get("data", {}).get("outcome_fn", "sigmoid")
