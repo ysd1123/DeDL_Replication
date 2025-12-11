@@ -86,7 +86,7 @@ def _predict_sdl(models: Union[StructuredNet, Sequence[StructuredNet]], X: np.nd
             for m in models:
                 pred, _ = m(x_tensor, t_batch)
                 preds.append(pred.detach().cpu().numpy())
-            return float(np.mean(np.concatenate(preds, axis=0)))
+            return float(np.mean(np.stack(preds, axis=0), axis=0).mean())
         pred, _ = models(x_tensor, t_batch)
         return float(pred.mean().item())
 
