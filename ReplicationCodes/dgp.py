@@ -65,27 +65,46 @@ def estimate_true_ate_mc(
     n_mc: int, rng: np.random.RandomState
 ) -> pd.DataFrame:
     """
-    用 Monte Carlo 估计所有 2^m treatment 组合相对于 t0 的真 ATE。
+    用 Monte Carlo 估计所有 2^m treatment 组合相对于 t0 的真 ATE，
+    同时给出 Monte Carlo 标准误 SE_true 和 95% 置信区间。
     """
     ts_all = all_treatments(m)
     t0 = np.zeros(m, dtype=np.float32)
+
+    # Monte Carlo 抽样 X
     X = rng.uniform(0.0, 1.0, size=(n_mc, d_x)).astype(np.float32)
     phi = phi_eval(A, X)
     phi0 = phi[:, 0]
     phi_vec = phi[:, 1:m+1]
 
     def outcome_for_t(t: np.ndarray) -> np.ndarray:
+        """给定一个 treatment 组合 t，返回 g(X,t) 的 Monte Carlo 样本。"""
         eta = phi0 + (phi_vec * t).sum(axis=1)
         sigma = 1.0 / (1.0 + np.exp(-eta))
         g = phi_m1 * sigma
-        return g  # 不加噪声，直接用条件期望
+        return g  # 条件期望，不加噪声
 
-    y0 = outcome_for_t(t0)
+    y0 = outcome_for_t(t0)  # baseline
+
     ate_list = []
+    z_975 = 1.96
+
     for idx, t in enumerate(ts_all):
         yt = outcome_for_t(t)
-        ate = float((yt - y0).mean())
-        ate_list.append({"combo_index": idx, "ATE_true": ate, "t_vec": t.tolist()})
+        diff = yt - y0                         # 长度 n_mc 的样本
+        ate = float(diff.mean())               # Monte Carlo 均值
+        se = float(diff.std(ddof=1) / np.sqrt(n_mc))  # Monte Carlo 标准误
+        ci_low = ate - z_975 * se
+        ci_high = ate + z_975 * se
+
+        ate_list.append({
+            "combo_index": idx,
+            "ATE_true": ate,
+            "SE_true": se,
+            "CI_low_true": ci_low,
+            "CI_high_true": ci_high,
+            "t_vec": t.tolist(),
+        })
 
     df_true = pd.DataFrame(ate_list)
     return df_true
