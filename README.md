@@ -1,6 +1,6 @@
 # DeDL Framework Toolkit
 
-> This repository contains a reusable experiment framework derived from [the original synthetic experiment notebook](synthetic_experiments.ipynb) for the paper: [Zikun Ye, Zhiqi Zhang, Dennis J. Zhang, Heng Zhang, Renyu Zhang (2025) Deep Learning-Based Causal Inference for Large-Scale Combinatorial Experiments: Theory and Empirical Evidence. Management Science 0(0).](https://doi.org/10.1287/mnsc.2024.04625)
+> This repository contains a reusable experiment framework derived from [the original synthetic experiment notebook](https://github.com/zikunye2/deep_learning_based_causal_inference_for_combinatorial_experiments) for the paper: [Zikun Ye, Zhiqi Zhang, Dennis J. Zhang, Heng Zhang, Renyu Zhang (2025) Deep Learning-Based Causal Inference for Large-Scale Combinatorial Experiments: Theory and Empirical Evidence. Management Science 0(0).](https://doi.org/10.1287/mnsc.2024.04625)
 >
 > The notebook is preserved for reference, and the reusable Python modules provide a command-line workflow for running new DeDL experiments on synthetic or real data.
 
